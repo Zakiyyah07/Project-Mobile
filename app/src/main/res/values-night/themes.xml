@@ -1,0 +1,17 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Dark theme. -->
+    <style name="Base.Theme.CineSpot" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your dark theme here. -->
+        <item name="colorPrimaryDark">@color/main_color</item>
+
+        <!-- Custom theme attributes for dark mode -->
+        <item name="bg">@color/dark</item>
+        <item name="boldText">@color/white_bold_text</item>
+        <item name="regularText">@color/white_regular_text</item>
+        <item name="card">@color/light_dark</item>
+        <item name="appbar">@color/dark_blue</item>
+        <item name="appbarAttribute">@color/white_bold_text</item>
+    </style>
+
+    <style name="Theme.CineSpot" parent="Base.Theme.CineSpot" />
+</resources>

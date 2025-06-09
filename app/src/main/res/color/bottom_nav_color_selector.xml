@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File: res/color/bottom_nav_color_selector.xml -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Selected/Active state -->
+    <item android:state_selected="true" android:color="@color/orange" />
+
+    <!-- Checked state (untuk consistency) -->
+    <item android:state_checked="true" android:color="@color/orange" />
+
+    <!-- Default/Unselected state -->
+    <item android:color="@color/black_regular_text" />
+
+</selector>

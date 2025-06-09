@@ -1,0 +1,17 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.CineSpot" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <item name="colorPrimaryDark">@color/main_color</item>
+
+        <!-- Custom theme attributes for light mode -->
+        <item name="bg">@color/light_white</item>
+        <item name="boldText">@color/black_bold_text</item>
+        <item name="regularText">@color/black_regular_text</item>
+        <item name="card">@color/white</item>
+        <item name="appbar">@color/light_white</item>
+        <item name="appbarAttribute">@color/black_bold_text</item>
+    </style>
+
+    <style name="Theme.CineSpot" parent="Base.Theme.CineSpot" />
+</resources>
