@@ -30,6 +30,8 @@ public class MoviesModel implements Parcelable {
     @SerializedName("Poster_Link")
     private String posterLink;
 
+    public MoviesModel() {}
+
     protected MoviesModel(Parcel in) {
         id = in.readString();
         rank = in.readString();

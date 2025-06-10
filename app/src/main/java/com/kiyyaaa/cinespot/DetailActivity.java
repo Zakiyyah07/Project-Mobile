@@ -1,13 +1,11 @@
 package com.kiyyaaa.cinespot;
 
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.os.Bundle;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -27,6 +25,7 @@ public class DetailActivity extends AppCompatActivity {
     private TextView overview;
     private MaterialButton favoriteButton;
     private boolean isFavorite = false;
+    private int loggedInUserId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,17 +44,20 @@ public class DetailActivity extends AppCompatActivity {
 
         backButton.setOnClickListener(view -> finish());
 
-        favoriteButton.setOnClickListener(v -> {
-            toggleFavorite();
-        });
+        loggedInUserId = getLoggedInUserId();
 
         MoviesModel moviesModel = getIntent().getParcelableExtra("moviesModel");
         if (moviesModel != null) {
             showMovieDetails(moviesModel);
-
-            int loggedInUserId = getLoggedInUserId();
-            isFavorite = isMovieFavorite(loggedInUserId, moviesModel.getRank());
+            isFavorite = dbConfig.isFavorite(loggedInUserId, moviesModel.getRank());
             updateFavoriteIcon();
+
+            favoriteButton.setOnClickListener(v -> {
+                toggleFavorite(moviesModel);
+            });
+        } else {
+            Toast.makeText(this, "Movie data not available", Toast.LENGTH_SHORT).show();
+            finish();
         }
     }
 
@@ -68,22 +70,16 @@ public class DetailActivity extends AppCompatActivity {
         Picasso.get().load(moviesModel.getPosterLink()).into(posterDetail);
     }
 
-    private void toggleFavorite() {
-        MoviesModel moviesModel = getIntent().getParcelableExtra("moviesModel");
-        if (moviesModel == null) return;
-
+    private void toggleFavorite(MoviesModel moviesModel) {
         if (isFavorite) {
-            dbConfig.deleteFavorite(getLoggedInUserId(), moviesModel.getRank());
-            favoriteButton.setIconResource(R.drawable.fav);
-            favoriteButton.setIconTintResource(R.color.white);
+            dbConfig.deleteFavorite(loggedInUserId, moviesModel.getRank());
             Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
         } else {
-            dbConfig.insertFavorite(getLoggedInUserId(), moviesModel.getRank());
-            favoriteButton.setIconResource(R.drawable.love);
-            favoriteButton.setIconTintResource(R.color.favorite_red);
+            dbConfig.insertFavorite(loggedInUserId, moviesModel);
             Toast.makeText(this, "Added to favorites", Toast.LENGTH_SHORT).show();
         }
         isFavorite = !isFavorite;
+        updateFavoriteIcon();
     }
 
     private void updateFavoriteIcon() {
@@ -94,24 +90,6 @@ public class DetailActivity extends AppCompatActivity {
             favoriteButton.setIconResource(R.drawable.fav);
             favoriteButton.setIconTintResource(R.color.white);
         }
-    }
-
-    private boolean isMovieFavorite(int userId, String movieRank) {
-        Cursor cursor = dbConfig.getFavoriteMovieByUserId(userId);
-        boolean favorite = false;
-        if (cursor != null) {
-            while (cursor.moveToNext()) {
-                String storedRank = cursor.getString(
-                        cursor.getColumnIndexOrThrow(DbConfig.COLUMN_MOVIE_ID)
-                );
-                if (storedRank.equals(movieRank)) {
-                    favorite = true;
-                    break;
-                }
-            }
-            cursor.close();
-        }
-        return favorite;
     }
 
     private int getLoggedInUserId() {

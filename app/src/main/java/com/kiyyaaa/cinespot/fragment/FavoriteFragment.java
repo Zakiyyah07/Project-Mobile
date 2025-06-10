@@ -2,11 +2,9 @@ package com.kiyyaaa.cinespot.fragment;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +23,7 @@ import com.kiyyaaa.cinespot.api.ApiService;
 import com.kiyyaaa.cinespot.models.MoviesModel;
 import com.kiyyaaa.cinespot.models.MoviesResponse;
 import com.kiyyaaa.cinespot.sqlite.DbConfig;
+import com.kiyyaaa.cinespot.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,10 +43,10 @@ public class FavoriteFragment extends Fragment {
     private View progressBar;
     private FavoriteAdapter favoriteAdapter;
     private DbConfig dbConfig;
-    private ApiService service;
     private SharedPreferences preferences;
     private ExecutorService executor;
     private Handler handler;
+    private ApiService service;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -68,83 +67,85 @@ public class FavoriteFragment extends Fragment {
         retryButton = view.findViewById(R.id.retryButton);
         progressBar = view.findViewById(R.id.progressBar);
 
-        recyclerView.setVisibility(View.GONE);
-        emptyState.setVisibility(View.GONE);
-        errorState.setVisibility(View.GONE);
-        progressBar.setVisibility(View.GONE);
-
-        dbConfig = new DbConfig(requireActivity());
+        dbConfig = new DbConfig(requireContext());
         preferences = requireActivity().getSharedPreferences("login_prefs", Context.MODE_PRIVATE);
-        int userId = preferences.getInt("user_id", -1);
-        Log.d("FavoriteFragment", "Logged in userId = " + userId);
-
         executor = Executors.newSingleThreadExecutor();
         handler = new Handler(Looper.getMainLooper());
+        service = ApiConfig.getClient().create(ApiService.class);
 
-        retryButton.setOnClickListener(v -> loadFavorites(userId));
-
-        loadFavorites(userId);
+        retryButton.setOnClickListener(v -> loadFavorites());
+        loadFavorites();
     }
 
-    private void loadFavorites(int userId) {
+    private int getCurrentUserId() {
+        return preferences.getInt("user_id", -1);
+    }
+
+    private void loadFavorites() {
+        int userId = getCurrentUserId();
         progressBar.setVisibility(View.VISIBLE);
         emptyState.setVisibility(View.GONE);
         errorState.setVisibility(View.GONE);
         recyclerView.setVisibility(View.GONE);
 
-        executor.execute(() -> {
-            Cursor cursor = dbConfig.getFavoriteMovieByUserId(userId);
-            List<String> favoriteMoviesRank = new ArrayList<>();
-            if (cursor != null && cursor.moveToFirst()) {
-                do {
-                    String rank = cursor.getString(cursor.getColumnIndexOrThrow(DbConfig.COLUMN_MOVIE_ID));
-                    favoriteMoviesRank.add(rank);
-                    Log.d("FavoriteFragment", "Fav rank: " + rank);
-                } while (cursor.moveToNext());
-                cursor.close();
-            }
-            handler.post(() -> fetchAndDisplayFavorites(favoriteMoviesRank, userId));
-        });
+        if (Utils.isNetworkAvailable(requireContext())) {
+            // Jika online: fetch API lalu filter berdasarkan rank favorit lokal
+            service.getMovies().enqueue(new Callback<MoviesResponse>() {
+                @Override
+                public void onResponse(@NonNull Call<MoviesResponse> call, @NonNull Response<MoviesResponse> response) {
+                    progressBar.setVisibility(View.GONE);
+                    if (!isAdded() || !response.isSuccessful() || response.body() == null) {
+                        showErrorState();
+                        return;
+                    }
+                    List<MoviesModel> allMovies = response.body().getMovies();
+                    // dapatkan semua rank favorit dari DB
+                    List<MoviesModel> localFavs = dbConfig.getAllFavorites(userId);
+                    List<String> favRanks = new ArrayList<>();
+                    for (MoviesModel m : localFavs) {
+                        favRanks.add(m.getRank());
+                    }
+                    // filter
+                    List<MoviesModel> favoriteMovies = new ArrayList<>();
+                    for (MoviesModel movie : allMovies) {
+                        if (favRanks.contains(movie.getRank())) {
+                            favoriteMovies.add(movie);
+                        }
+                    }
+                    displayFavorites(favoriteMovies);
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<MoviesResponse> call, @NonNull Throwable t) {
+                    progressBar.setVisibility(View.GONE);
+                    showErrorState();
+                }
+            });
+        } else {
+            // Offline: tampilkan langsung data favorit lokal
+            executor.execute(() -> {
+                List<MoviesModel> favoriteMovies = dbConfig.getAllFavorites(getCurrentUserId());
+                handler.post(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    displayFavorites(favoriteMovies);
+                });
+            });
+        }
     }
 
-    private void fetchAndDisplayFavorites(List<String> favoriteMoviesRank, int userId) {
-        service = ApiConfig.getClient().create(ApiService.class);
-        service.getMovies().enqueue(new Callback<MoviesResponse>() {
-            @Override
-            public void onResponse(@NonNull Call<MoviesResponse> call, @NonNull Response<MoviesResponse> response) {
-                progressBar.setVisibility(View.GONE);
-                if (!isAdded() || !response.isSuccessful() || response.body() == null) {
-                    showErrorState();
-                    return;
-                }
-                List<MoviesModel> allMovies = response.body().getMovies();
-                List<MoviesModel> favoriteMovies = new ArrayList<>();
-                for (MoviesModel movie : allMovies) {
-                    if (favoriteMoviesRank.contains(movie.getRank())) {
-                        favoriteMovies.add(movie);
-                    }
-                }
-                favoriteAdapter = new FavoriteAdapter(
-                        getParentFragmentManager(),
-                        favoriteMovies,
-                        userId
-                );
-                recyclerView.setAdapter(favoriteAdapter);
-
-                if (favoriteMovies.isEmpty()) {
-                    emptyState.setVisibility(View.VISIBLE);
-                } else {
-                    recyclerView.setVisibility(View.VISIBLE);
-                }
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<MoviesResponse> call, @NonNull Throwable t) {
-                Log.e("FavoriteFragment", "API failure: " + t.getMessage());
-                progressBar.setVisibility(View.GONE);
-                showErrorState();
-            }
-        });
+    private void displayFavorites(List<MoviesModel> favoriteMovies) {
+        if (favoriteMovies == null || favoriteMovies.isEmpty()) {
+            emptyState.setVisibility(View.VISIBLE);
+            recyclerView.setVisibility(View.GONE);
+        } else {
+            favoriteAdapter = new FavoriteAdapter(
+                    getParentFragmentManager(),
+                    favoriteMovies,
+                    getCurrentUserId());
+            recyclerView.setAdapter(favoriteAdapter);
+            recyclerView.setVisibility(View.VISIBLE);
+            emptyState.setVisibility(View.GONE);
+        }
     }
 
     private void showErrorState() {
@@ -156,15 +157,12 @@ public class FavoriteFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdown();
-        }
+        executor.shutdown();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        int userId = preferences.getInt("user_id", -1);
-        loadFavorites(userId);
+        loadFavorites();
     }
 }
